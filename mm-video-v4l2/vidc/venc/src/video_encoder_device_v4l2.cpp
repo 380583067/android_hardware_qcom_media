@@ -64,6 +64,13 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SZ_4K 0x1000
 #define SZ_1M 0x100000
 
+#ifndef EXTRADATA_NONE
+#define EXTRADATA_NONE 0
+#endif
+#ifndef EXTRADATA_METADATA_MBI
+#define EXTRADATA_METADATA_MBI 1
+#endif
+
 /* MPEG4 profile and level table*/
 static const unsigned int mpeg4_profile_level_table[][MAX_PROFILE_PARAMS]= {
     /*max mb per frame, max mb per sec, max bitrate, level, profile, dpbmbs*/
