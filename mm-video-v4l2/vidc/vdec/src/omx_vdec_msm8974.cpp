@@ -23,6 +23,31 @@ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
 OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+// Compatibility fixes for newer kernel headers
+#ifndef 0
+#define 0 0
+#define 1 1
+#define 2 2
+#define 3 3
+#define 4 4
+#define 5 5
+#define 6 6
+#define 10 10
+#define 11 11
+#define 12 12
+#define 13 13
+#define 14 14
+#define MSM_VIDC_INTERLACE_FRAME_PROGRESSIVE MSM_VIDC_MSM_VIDC_INTERLACE_FRAME_PROGRESSIVE
+#define MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST MSM_VIDC_MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST
+#define MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST MSM_VIDC_MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST
+#define MSM_VIDC_FRAME_RECONSTRUCTION_CORRECT MSM_VIDC_MSM_VIDC_FRAME_RECONSTRUCTION_CORRECT
+#define MSM_VIDC_EXTRADATA_RECOVERY_POINT_SEI MSM_VIDC_MSM_VIDC_EXTRADATA_RECOVERY_POINT_SEI
+#define MSM_VIDC_EXTRADATA_S3D_FRAME_PACKING MSM_VIDC_MSM_VIDC_EXTRADATA_S3D_FRAME_PACKING
+#endif
+#ifndef V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO
+#define V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO V4L2_MPEG_VIDC_6
+#endif
+// End compatibility fixes
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------*/
 
@@ -7897,9 +7922,9 @@ int omx_vdec::alloc_map_ion_memory(OMX_U32 buffer_size,
     if ((secure_mode) && (flag & ION_SECURE))
         alloc_data->flags |= ION_SECURE;
 
-    alloc_data->heap_mask = ION_HEAP(ION_IOMMU_HEAP_ID);
+    alloc_data->heap_id_mask = ION_HEAP(ION_IOMMU_HEAP_ID);
     if (secure_mode && (alloc_data->flags & ION_SECURE))
-        alloc_data->heap_mask = ION_HEAP(MEM_HEAP_ID);
+        alloc_data->heap_id_mask = ION_HEAP(MEM_HEAP_ID);
     rc = ioctl(fd,ION_IOC_ALLOC,alloc_data);
     if (rc || !alloc_data->handle) {
         DEBUG_PRINT_ERROR("ION ALLOC memory failed ");
@@ -8662,27 +8687,27 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
     OMX_OTHER_EXTRADATATYPE *data = (struct OMX_OTHER_EXTRADATATYPE *)p_extradata;
     if (data && p_extra) {
         while ((consumed_len < drv_ctx.extradata_info.buffer_size)
-                && (data->eType != (OMX_EXTRADATATYPE)EXTRADATA_NONE)) {
+                && (data->eType != (OMX_EXTRADATATYPE)0)) {
             if ((consumed_len + data->nSize) > (unsigned)drv_ctx.extradata_info.buffer_size) {
                 DEBUG_PRINT_LOW("Invalid extra data size");
                 break;
             }
             DEBUG_PRINT_LOW("handle_extradata: eType = %d", data->eType);
             switch ((unsigned long)data->eType) {
-                case EXTRADATA_INTERLACE_VIDEO:
+                case 1:
                     struct msm_vidc_interlace_payload *payload;
                     payload = (struct msm_vidc_interlace_payload *)data->data;
                     if (payload) {
                         enable = 1;
                         switch (payload->format) {
-                            case INTERLACE_FRAME_PROGRESSIVE:
+                            case MSM_VIDC_INTERLACE_FRAME_PROGRESSIVE:
                                 drv_ctx.interlace = VDEC_InterlaceFrameProgressive;
                                 enable = 0;
                                 break;
-                            case INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST:
+                            case MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST:
                                 drv_ctx.interlace = VDEC_InterlaceInterleaveFrameTopFieldFirst;
                                 break;
-                            case INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST:
+                            case MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST:
                                 drv_ctx.interlace = VDEC_InterlaceInterleaveFrameBottomFieldFirst;
                                 break;
                             default:
@@ -8699,29 +8724,29 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         p_extra = (OMX_OTHER_EXTRADATATYPE *) (((OMX_U8 *) p_extra) + p_extra->nSize);
                     }
                     break;
-                case EXTRADATA_FRAME_RATE:
+                case 2:
                     struct msm_vidc_framerate_payload *frame_rate_payload;
                     frame_rate_payload = (struct msm_vidc_framerate_payload *)data->data;
                     frame_rate = frame_rate_payload->frame_rate;
                     break;
-                case EXTRADATA_TIMESTAMP:
+                case 3:
                     struct msm_vidc_ts_payload *time_stamp_payload;
                     time_stamp_payload = (struct msm_vidc_ts_payload *)data->data;
                     time_stamp = time_stamp_payload->timestamp_lo;
                     time_stamp |= ((unsigned long long)time_stamp_payload->timestamp_hi << 32);
                     p_buf_hdr->nTimeStamp = time_stamp;
                     break;
-                case EXTRADATA_NUM_CONCEALED_MB:
+                case 4:
                     struct msm_vidc_concealmb_payload *conceal_mb_payload;
                     conceal_mb_payload = (struct msm_vidc_concealmb_payload *)data->data;
                     num_MB_in_frame = ((drv_ctx.video_resolution.frame_width + 15) *
                             (drv_ctx.video_resolution.frame_height + 15)) >> 8;
                     num_conceal_MB = ((num_MB_in_frame > 0)?(conceal_mb_payload->num_mbs * 100 / num_MB_in_frame) : 0);
                     break;
-                case EXTRADATA_INDEX:
+                case 5:
                     int *etype;
                     etype  = (int *)(data->data);
-                    if (etype && *etype == EXTRADATA_ASPECT_RATIO) {
+                    if (etype && *etype == 6) {
                         struct msm_vidc_aspect_ratio_payload *aspect_ratio_payload;
                         aspect_ratio_payload = (struct msm_vidc_aspect_ratio_payload *)(++etype);
                         if (aspect_ratio_payload) {
@@ -8732,11 +8757,11 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         }
                     }
                     break;
-                case EXTRADATA_RECOVERY_POINT_SEI:
+                case MSM_VIDC_EXTRADATA_RECOVERY_POINT_SEI:
                     struct msm_vidc_recoverysei_payload *recovery_sei_payload;
                     recovery_sei_payload = (struct msm_vidc_recoverysei_payload *)data->data;
                     recovery_sei_flags = recovery_sei_payload->flags;
-                    if (recovery_sei_flags != FRAME_RECONSTRUCTION_CORRECT) {
+                    if (recovery_sei_flags != MSM_VIDC_FRAME_RECONSTRUCTION_CORRECT) {
                         p_buf_hdr->nFlags |= OMX_BUFFERFLAG_DATACORRUPT;
                         DEBUG_PRINT_HIGH("");
                         DEBUG_PRINT_HIGH("***************************************************");
@@ -8744,10 +8769,10 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         DEBUG_PRINT_HIGH("***************************************************");
                     }
                     break;
-                case EXTRADATA_PANSCAN_WINDOW:
+                case 10:
                     panscan_payload = (struct msm_vidc_panscan_window_payload *)data->data;
                     break;
-                case EXTRADATA_MPEG2_SEQDISP:
+                case 11:
                     struct msm_vidc_mpeg2_seqdisp_payload *seqdisp_payload;
                     seqdisp_payload = (struct msm_vidc_mpeg2_seqdisp_payload *)data->data;
                     if (seqdisp_payload) {
@@ -8755,7 +8780,7 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         m_disp_vert_size = seqdisp_payload->disp_height;
                     }
                     break;
-                case EXTRADATA_S3D_FRAME_PACKING:
+                case MSM_VIDC_EXTRADATA_S3D_FRAME_PACKING:
                     struct msm_vidc_s3d_frame_packing_payload *s3d_frame_packing_payload;
                     s3d_frame_packing_payload = (struct msm_vidc_s3d_frame_packing_payload *)data->data;
                     if (client_extradata & OMX_FRAMEPACK_EXTRADATA) {
@@ -8763,7 +8788,7 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         p_extra = (OMX_OTHER_EXTRADATATYPE *) (((OMX_U8 *) p_extra) + p_extra->nSize);
                     }
                     break;
-                case EXTRADATA_FRAME_QP:
+                case 12:
                     struct msm_vidc_frame_qp_payload *qp_payload;
                     qp_payload = (struct msm_vidc_frame_qp_payload*)data->data;
                     if (client_extradata & OMX_QP_EXTRADATA) {
@@ -8771,7 +8796,7 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         p_extra = (OMX_OTHER_EXTRADATATYPE *) (((OMX_U8 *) p_extra) + p_extra->nSize);
                     }
                     break;
-                case EXTRADATA_FRAME_BITS_INFO:
+                case 13:
                     struct msm_vidc_frame_bits_info_payload *bits_info_payload;
                     bits_info_payload = (struct msm_vidc_frame_bits_info_payload*)data->data;
                     if (client_extradata & OMX_BITSINFO_EXTRADATA) {
@@ -8779,7 +8804,7 @@ void omx_vdec::handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr)
                         p_extra = (OMX_OTHER_EXTRADATATYPE *) (((OMX_U8 *) p_extra) + p_extra->nSize);
                     }
                     break;
-                case EXTRADATA_STREAM_USERDATA:
+                case 14:
                     if (client_extradata & OMX_EXTNUSER_EXTRADATA) {
                         append_user_extradata(p_extra, data);
                         p_extra = (OMX_OTHER_EXTRADATATYPE *) (((OMX_U8 *) p_extra) + p_extra->nSize);
@@ -8839,7 +8864,7 @@ OMX_ERRORTYPE omx_vdec::enable_extradata(OMX_U32 requested_extradata,
     if (enable) {
         if (requested_extradata & OMX_INTERLACE_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_NONE;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set interlaced extradata."
                         " Quality of interlaced clips might be impacted.");
@@ -8847,12 +8872,12 @@ OMX_ERRORTYPE omx_vdec::enable_extradata(OMX_U32 requested_extradata,
         }
         if (requested_extradata & OMX_FRAMEINFO_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set framerate extradata");
             }
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_NUM_CONCEALED_MB;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set concealed MB extradata");
             }
@@ -8862,18 +8887,18 @@ OMX_ERRORTYPE omx_vdec::enable_extradata(OMX_U32 requested_extradata,
                 DEBUG_PRINT_HIGH("Failed to set recovery point SEI extradata");
             }
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_PANSCAN_WINDOW;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_NONE;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set panscan extradata");
             }
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_INDEX_EXTRADATA_ASPECT_RATIO;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set panscan extradata");
             }
             if (output_capability == V4L2_PIX_FMT_MPEG2) {
                 control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-                control.value =  V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP;
+                control.value =  V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO;
                 if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                     DEBUG_PRINT_HIGH("Failed to set panscan extradata");
                 }
@@ -8881,7 +8906,7 @@ OMX_ERRORTYPE omx_vdec::enable_extradata(OMX_U32 requested_extradata,
         }
         if (requested_extradata & OMX_TIMEINFO_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_TIMESTAMP;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set timeinfo extradata");
             }
@@ -8900,21 +8925,21 @@ OMX_ERRORTYPE omx_vdec::enable_extradata(OMX_U32 requested_extradata,
         }
         if (requested_extradata & OMX_QP_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_QP;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set QP extradata");
             }
         }
         if (requested_extradata & OMX_BITSINFO_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_BITS_INFO;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_QP;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set frame bits info extradata");
             }
         }
         if (requested_extradata & OMX_EXTNUSER_EXTRADATA) {
             control.id = V4L2_CID_MPEG_VIDC_VIDEO_EXTRADATA;
-            control.value = V4L2_MPEG_VIDC_EXTRADATA_STREAM_USERDATA;
+            control.value = V4L2_MPEG_VIDC_EXTRADATA_FRAME_BITS_INFO;
             if (ioctl(drv_ctx.video_driver_fd, VIDIOC_S_CTRL, &control)) {
                 DEBUG_PRINT_HIGH("Failed to set stream userdata extradata");
             }
@@ -9104,15 +9129,15 @@ void omx_vdec::append_interlace_extradata(OMX_OTHER_EXTRADATATYPE *extra,
     interlace_format->nVersion.nVersion = OMX_SPEC_VERSION;
     interlace_format->nPortIndex = OMX_CORE_OUTPUT_PORT_INDEX;
 
-    if ((interlaced_format_type == INTERLACE_FRAME_PROGRESSIVE)  && !is_mbaff) {
+    if ((interlaced_format_type == MSM_VIDC_INTERLACE_FRAME_PROGRESSIVE)  && !is_mbaff) {
         interlace_format->bInterlaceFormat = OMX_FALSE;
         interlace_format->nInterlaceFormats = OMX_InterlaceFrameProgressive;
         drv_ctx.interlace = VDEC_InterlaceFrameProgressive;
-    } else if ((interlaced_format_type == INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST) && !is_mbaff) {
+    } else if ((interlaced_format_type == MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_TOPFIELDFIRST) && !is_mbaff) {
         interlace_format->bInterlaceFormat = OMX_TRUE;
         interlace_format->nInterlaceFormats =  OMX_InterlaceInterleaveFrameTopFieldFirst;
         drv_ctx.interlace = VDEC_InterlaceFrameProgressive;
-    } else if ((interlaced_format_type == INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST) && !is_mbaff) {
+    } else if ((interlaced_format_type == MSM_VIDC_INTERLACE_INTERLEAVE_FRAME_BOTTOMFIELDFIRST) && !is_mbaff) {
         interlace_format->bInterlaceFormat = OMX_TRUE;
         interlace_format->nInterlaceFormats = OMX_InterlaceInterleaveFrameBottomFieldFirst;
         drv_ctx.interlace = VDEC_InterlaceFrameProgressive;
@@ -10090,4 +10115,3 @@ OMX_ERRORTYPE omx_vdec::describeColorFormat(OMX_PTR pParam) {
     return OMX_ErrorNone;
 #endif //FLEXYUV_SUPPORTED
 }
-
